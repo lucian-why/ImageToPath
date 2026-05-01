@@ -18,7 +18,7 @@ from PIL import Image as PILImage, ImageDraw
 import win32con
 
 from AppConfig import load_config, save_config, AppConfig
-from ClipboardHelper import copy_file_path
+from ClipboardHelper import copy_file_path, copy_image
 from ScreenshotCapture import capture_fullscreen, capture_region, save_image
 from ClipboardMonitor import ClipboardMonitor
 
@@ -120,23 +120,19 @@ def create_tray_icon_image():
 
 
 def on_screenshot():
-    """热键回调：全屏截图 → 保存 → 复制路径"""
+    """热键回调：全屏截图 → 复制图片到剪贴板"""
     try:
         img = capture_fullscreen()
         if img is None:
             notify("截图失败", "无法获取屏幕截图")
             return
 
-        filepath = save_image(img, _config, source="fullscreen")
-        if filepath is None:
-            notify("保存失败", "无法保存截图")
+        if not copy_image(img):
+            notify("复制失败", "无法复制全屏截图到剪贴板")
             return
 
-        if _config.copy_path_to_clipboard:
-            copy_file_path(filepath)
-
         if _config.show_notification:
-            notify("截图已保存", filepath)
+            notify("截图已复制", "全屏截图已放入剪贴板")
     except Exception as e:
         notify("错误", str(e))
 
@@ -216,8 +212,8 @@ def show_welcome_window():
             "然后把图片文件路径放回剪贴板。\n\n"
             "解决的问题：不用先手动保存图片、再复制文件地址。"
             "复制图片后直接 Ctrl+V，就能粘贴保存后的路径。\n\n"
-            "PrintScreen 会被本软件接管为区域截图；"
-            "Ctrl+PrintScreen 是全屏截图。\n\n"
+            "PrintScreen 会被本软件接管为区域截图并复制文件路径；"
+            "Ctrl+PrintScreen 会把全屏截图图片放入剪贴板。\n\n"
             "关闭这个窗口不会退出程序。以后请在右下角系统托盘里"
             "右键 ImageToPath 图标进行设置、打开保存目录或退出。"
         )
@@ -402,7 +398,7 @@ def main():
 
     menu = pystray.Menu(
         pystray.MenuItem("区域截图 (PrintScreen)", menu_capture_region, default=True),
-        pystray.MenuItem("全屏截图 (Ctrl+PrintScreen)", menu_capture_fullscreen),
+        pystray.MenuItem("复制全屏截图 (Ctrl+PrintScreen)", menu_capture_fullscreen),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "自动保存剪贴板图片",

@@ -6,9 +6,9 @@ from unittest import mock
 
 import AppConfig
 from AppConfig import AppConfig as Config
-from ClipboardHelper import _build_hdrop_data
+from ClipboardHelper import _build_hdrop_data, _image_to_dib_bytes
 from ClipboardMonitor import ClipboardMonitor
-from Program import apply_save_folder, mark_welcome_shown
+from Program import apply_save_folder, mark_welcome_shown, on_screenshot
 from ScreenshotCapture import generate_filename
 
 
@@ -86,6 +86,28 @@ class ClipboardHelperTests(unittest.TestCase):
         self.assertEqual(data[16:20], (1).to_bytes(4, "little"))
         self.assertTrue(data.endswith(b"\x00\x00\x00\x00"))
         self.assertIn(r"C:\tmp\a.png".encode("utf-16le"), data)
+
+    def test_image_to_dib_bytes_removes_bmp_file_header(self):
+        from PIL import Image
+
+        data = _image_to_dib_bytes(Image.new("RGB", (2, 2), (255, 0, 0)))
+
+        self.assertNotEqual(data[:2], b"BM")
+        self.assertGreater(len(data), 40)
+
+
+class HotkeyBehaviorTests(unittest.TestCase):
+    def test_ctrl_printscreen_copies_fullscreen_image_without_saving_file(self):
+        image = mock.Mock()
+
+        with mock.patch("Program._config", Config(show_notification=False)), \
+             mock.patch("Program.capture_fullscreen", return_value=image), \
+             mock.patch("Program.copy_image", return_value=True) as copy_image, \
+             mock.patch("Program.save_image") as save_image:
+            on_screenshot()
+
+        copy_image.assert_called_once_with(image)
+        save_image.assert_not_called()
 
 
 class FilenameTests(unittest.TestCase):

@@ -16,7 +16,7 @@ It is designed for this workflow:
 - Auto-save images from the clipboard.
 - Copy the saved image path back to the clipboard.
 - Region screenshot with `PrintScreen`.
-- Fullscreen screenshot with `Ctrl+PrintScreen`.
+- Copy a fullscreen screenshot image to the clipboard with `Ctrl+PrintScreen`.
 - Tray menu for changing and opening the save folder.
 - Single-instance guard to avoid duplicate tray apps.
 - First-run welcome window. After closing it, the app keeps running in the system tray.
@@ -83,6 +83,6 @@ This format works well with name sorting. Ascending filename order is also ascen
 ## Notes
 
 - Windows is the main supported platform.
-- `PrintScreen` is taken over by this app for region screenshots. `Ctrl+PrintScreen` captures the fullscreen.
+- `PrintScreen` is taken over by this app for region screenshots and copied file paths. `Ctrl+PrintScreen` copies a fullscreen screenshot image to the clipboard.
 - The app listens for clipboard images. If you do not need this, disable "自动保存剪贴板图片" from the tray menu.
 - The build is not code-signed. Windows may show a security warning on first run.

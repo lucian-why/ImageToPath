@@ -67,6 +67,39 @@ def copy_file_path(path: str) -> bool:
     return False
 
 
+def copy_image(img: Image.Image) -> bool:
+    """复制 PIL Image 到剪贴板，保留为图片数据。"""
+    if img is None:
+        return False
+
+    data = _image_to_dib_bytes(img)
+    for attempt in range(RETRY_TIMES):
+        try:
+            with _clipboard_lock:
+                win32clipboard.OpenClipboard()
+                try:
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+                finally:
+                    win32clipboard.CloseClipboard()
+            return True
+        except Exception:
+            if attempt < RETRY_TIMES - 1:
+                time.sleep(RETRY_DELAY)
+    return False
+
+
+def _image_to_dib_bytes(img: Image.Image) -> bytes:
+    """将 PIL Image 转为剪贴板 CF_DIB 数据。"""
+    save_img = img
+    if save_img.mode not in ("RGB", "RGBA"):
+        save_img = save_img.convert("RGB")
+
+    buf = BytesIO()
+    save_img.save(buf, "BMP")
+    return buf.getvalue()[14:]
+
+
 def _build_hdrop_data(path: str) -> bytes:
     """构造 CF_HDROP Unicode DROPFILES 数据。"""
     header = struct.pack("<IiiII", 20, 0, 0, 0, 1)
