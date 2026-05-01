@@ -177,6 +177,77 @@ def notify(title: str, message: str):
         pass
 
 
+def mark_welcome_shown(config: AppConfig) -> bool:
+    """标记欢迎弹窗已显示。"""
+    old_value = config.show_welcome_on_startup
+    config.show_welcome_on_startup = False
+    if save_config(config):
+        return True
+    config.show_welcome_on_startup = old_value
+    return False
+
+
+def show_welcome_window():
+    """首次启动说明窗口。关闭后程序继续留在托盘。"""
+    try:
+        import tkinter as tk
+        from tkinter import ttk
+
+        root = tk.Tk()
+        root.title("ImageToPath")
+        root.resizable(False, False)
+        root.attributes("-topmost", True)
+
+        width, height = 460, 320
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
+        x = max((screen_w - width) // 2, 0)
+        y = max((screen_h - height) // 2, 0)
+        root.geometry(f"{width}x{height}+{x}+{y}")
+
+        frame = ttk.Frame(root, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        title = ttk.Label(frame, text="ImageToPath 已在后台运行", font=("", 14, "bold"))
+        title.pack(anchor="w")
+
+        message = (
+            "这个工具会把剪贴板里的图片或截图保存成文件，"
+            "然后把图片文件路径放回剪贴板。\n\n"
+            "解决的问题：不用先手动保存图片、再复制文件地址。"
+            "复制图片后直接 Ctrl+V，就能粘贴保存后的路径。\n\n"
+            "PrintScreen 会被本软件接管为区域截图；"
+            "Ctrl+PrintScreen 是全屏截图。\n\n"
+            "关闭这个窗口不会退出程序。以后请在右下角系统托盘里"
+            "右键 ImageToPath 图标进行设置、打开保存目录或退出。"
+        )
+        body = ttk.Label(frame, text=message, wraplength=420, justify="left")
+        body.pack(anchor="w", pady=(14, 18))
+
+        def close_window():
+            mark_welcome_shown(_config)
+            root.destroy()
+
+        button_row = ttk.Frame(frame)
+        button_row.pack(fill="x")
+        ttk.Button(button_row, text="打开保存目录", command=lambda: menu_open_folder(None, None)).pack(side="left")
+        ttk.Button(button_row, text="知道了，收进托盘", command=close_window).pack(side="right")
+
+        root.protocol("WM_DELETE_WINDOW", close_window)
+        root.mainloop()
+    except Exception:
+        try:
+            mark_welcome_shown(_config)
+        except Exception:
+            pass
+
+
+def maybe_show_welcome_window():
+    """首次启动时显示说明；关闭后继续进入托盘。"""
+    if _config and _config.show_welcome_on_startup:
+        show_welcome_window()
+
+
 def apply_save_folder(config: AppConfig, folder: str) -> tuple[bool, str]:
     """创建并验证目录成功后，再写入配置。失败时不污染当前配置。"""
     if not folder:
@@ -351,6 +422,8 @@ def main():
         "ImageToPath - 截图保存到剪贴板路径",
         menu,
     )
+
+    maybe_show_welcome_window()
 
     # 双击托盘图标 → 全屏截图
     # pystray 不直接支持双击，用默认菜单项代替

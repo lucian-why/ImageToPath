@@ -8,13 +8,24 @@ import AppConfig
 from AppConfig import AppConfig as Config
 from ClipboardHelper import _build_hdrop_data
 from ClipboardMonitor import ClipboardMonitor
-from Program import apply_save_folder
+from Program import apply_save_folder, mark_welcome_shown
 from ScreenshotCapture import generate_filename
 
 
 class ConfigTests(unittest.TestCase):
     def test_config_path_uses_existing_appconfig_json(self):
         self.assertEqual(os.path.basename(AppConfig.CONFIG_PATH), "AppConfig.json")
+
+    def test_config_shows_welcome_on_first_run_by_default(self):
+        self.assertTrue(Config().show_welcome_on_startup)
+
+    def test_mark_welcome_shown_disables_future_welcome(self):
+        config = Config(show_welcome_on_startup=True)
+
+        with mock.patch("Program.save_config", return_value=True):
+            self.assertTrue(mark_welcome_shown(config))
+
+        self.assertFalse(config.show_welcome_on_startup)
 
 
 class SaveFolderTests(unittest.TestCase):

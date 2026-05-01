@@ -53,6 +53,9 @@ class AppConfig:
     # 开机自启
     start_with_windows: bool = False
 
+    # 首次启动显示欢迎说明
+    show_welcome_on_startup: bool = True
+
 
 def load_config() -> AppConfig:
     """加载配置，不存在则创建默认"""

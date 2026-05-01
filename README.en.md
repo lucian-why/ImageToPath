@@ -19,6 +19,7 @@ It is designed for this workflow:
 - Fullscreen screenshot with `Ctrl+PrintScreen`.
 - Tray menu for changing and opening the save folder.
 - Single-instance guard to avoid duplicate tray apps.
+- First-run welcome window. After closing it, the app keeps running in the system tray.
 - Timestamp filenames such as `20260501_184233.png`.
 - Adds a suffix when multiple images are saved in the same second, for example `20260501_184233_2.png`.
 
@@ -42,6 +43,8 @@ You can also double-click:
 ```text
 run.vbs
 ```
+
+On first launch, the app shows a short welcome window. Click "知道了，收进托盘" to hide it. Future launches will not show it again, and the app will keep running in the system tray.
 
 ## Config
 
@@ -80,5 +83,6 @@ This format works well with name sorting. Ascending filename order is also ascen
 ## Notes
 
 - Windows is the main supported platform.
+- `PrintScreen` is taken over by this app for region screenshots. `Ctrl+PrintScreen` captures the fullscreen.
 - The app listens for clipboard images. If you do not need this, disable "自动保存剪贴板图片" from the tray menu.
 - The build is not code-signed. Windows may show a security warning on first run.
