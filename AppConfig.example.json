@@ -11,5 +11,6 @@
   "minimize_to_tray": true,
   "clipboard_poll_interval": 500,
   "start_with_windows": false,
-  "show_welcome_on_startup": true
+  "show_welcome_on_startup": true,
+  "desktop_shortcut_created": false
 }

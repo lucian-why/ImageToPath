@@ -8,7 +8,14 @@ import AppConfig
 from AppConfig import AppConfig as Config
 from ClipboardHelper import _build_hdrop_data, _image_to_dib_bytes
 from ClipboardMonitor import ClipboardMonitor
-from Program import apply_save_folder, mark_welcome_shown, on_screenshot
+from Program import (
+    apply_save_folder,
+    build_launch_command,
+    get_desktop_shortcut_target,
+    mark_welcome_shown,
+    on_region_capture_to_clipboard,
+    set_start_with_windows,
+)
 from ScreenshotCapture import generate_filename
 
 
@@ -26,6 +33,51 @@ class ConfigTests(unittest.TestCase):
             self.assertTrue(mark_welcome_shown(config))
 
         self.assertFalse(config.show_welcome_on_startup)
+
+    def test_desktop_shortcut_created_flag_defaults_to_false(self):
+        self.assertFalse(Config().desktop_shortcut_created)
+
+
+class WindowsIntegrationTests(unittest.TestCase):
+    def test_source_desktop_shortcut_points_to_run_vbs(self):
+        with mock.patch("Program.os.path.exists", return_value=True):
+            target, args = get_desktop_shortcut_target(
+                app_dir=r"C:\Tools\ImageToPath",
+                executable=r"C:\Python\python.exe",
+                frozen=False,
+            )
+
+        self.assertEqual(target, r"C:\Tools\ImageToPath\run.vbs")
+        self.assertEqual(args, "")
+
+    def test_frozen_desktop_shortcut_points_to_exe(self):
+        target, args = get_desktop_shortcut_target(
+            app_dir=r"C:\Tools\ImageToPath",
+            executable=r"C:\Tools\ImageToPath\ImageToPath.exe",
+            frozen=True,
+        )
+
+        self.assertEqual(target, r"C:\Tools\ImageToPath\ImageToPath.exe")
+        self.assertEqual(args, "")
+
+    def test_source_startup_command_uses_pythonw_and_program(self):
+        command = build_launch_command(
+            app_dir=r"C:\Tools\ImageToPath",
+            executable=r"C:\Python\python.exe",
+            frozen=False,
+        )
+
+        self.assertEqual(command, r'"C:\Python\pythonw.exe" "C:\Tools\ImageToPath\Program.py"')
+
+    def test_start_with_windows_rolls_back_when_registry_update_fails(self):
+        config = Config(start_with_windows=False)
+
+        with mock.patch("Program.update_startup_registry", return_value=False), \
+             mock.patch("Program.save_config") as save_config:
+            self.assertFalse(set_start_with_windows(config, True))
+
+        self.assertFalse(config.start_with_windows)
+        save_config.assert_not_called()
 
 
 class SaveFolderTests(unittest.TestCase):
@@ -97,14 +149,14 @@ class ClipboardHelperTests(unittest.TestCase):
 
 
 class HotkeyBehaviorTests(unittest.TestCase):
-    def test_ctrl_printscreen_copies_fullscreen_image_without_saving_file(self):
+    def test_ctrl_printscreen_copies_region_image_without_saving_file(self):
         image = mock.Mock()
 
         with mock.patch("Program._config", Config(show_notification=False)), \
-             mock.patch("Program.capture_fullscreen", return_value=image), \
+             mock.patch("Program.capture_region", return_value=image), \
              mock.patch("Program.copy_image", return_value=True) as copy_image, \
              mock.patch("Program.save_image") as save_image:
-            on_screenshot()
+            on_region_capture_to_clipboard()
 
         copy_image.assert_called_once_with(image)
         save_image.assert_not_called()

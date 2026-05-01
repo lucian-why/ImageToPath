@@ -56,6 +56,9 @@ class AppConfig:
     # 首次启动显示欢迎说明
     show_welcome_on_startup: bool = True
 
+    # 是否已创建桌面快捷方式
+    desktop_shortcut_created: bool = False
+
 
 def load_config() -> AppConfig:
     """加载配置，不存在则创建默认"""

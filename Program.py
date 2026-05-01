@@ -10,6 +10,7 @@ import sys
 import threading
 import subprocess
 import ctypes
+import winreg
 from ctypes import wintypes
 from typing import Optional
 
@@ -19,7 +20,7 @@ import win32con
 
 from AppConfig import load_config, save_config, AppConfig
 from ClipboardHelper import copy_file_path, copy_image
-from ScreenshotCapture import capture_fullscreen, capture_region, save_image
+from ScreenshotCapture import capture_region, save_image
 from ClipboardMonitor import ClipboardMonitor
 
 # ——— 全局状态 ———
@@ -30,7 +31,7 @@ _instance_mutex_handle: Optional[int] = None
 
 # ——— 全局热键 ID ———
 HOTKEY_REGION_ID = 1      # PrintScreen → 区域截图
-HOTKEY_FULLSCREEN_ID = 2  # Ctrl+PrintScreen → 全屏截图
+HOTKEY_FULLSCREEN_ID = 2  # Ctrl+PrintScreen → 区域截图到剪贴板
 _wm_hotkey_stop = False
 _hotkey_thread = None
 
@@ -39,6 +40,7 @@ WM_HOTKEY = 0x0312
 MOD_NOREPEAT = 0x4000
 ERROR_ALREADY_EXISTS = 183
 SINGLE_INSTANCE_MUTEX_NAME = "Local\\ImageToPath.SingleInstance"
+STARTUP_REG_NAME = "ImageToPath"
 
 
 def acquire_single_instance_lock() -> bool:
@@ -119,20 +121,19 @@ def create_tray_icon_image():
     return img
 
 
-def on_screenshot():
-    """热键回调：全屏截图 → 复制图片到剪贴板"""
+def on_region_capture_to_clipboard():
+    """热键回调：区域截图 → 复制图片到剪贴板"""
     try:
-        img = capture_fullscreen()
+        img = capture_region()
         if img is None:
-            notify("截图失败", "无法获取屏幕截图")
             return
 
         if not copy_image(img):
-            notify("复制失败", "无法复制全屏截图到剪贴板")
+            notify("复制失败", "无法复制区域截图到剪贴板")
             return
 
         if _config.show_notification:
-            notify("截图已复制", "全屏截图已放入剪贴板")
+            notify("截图已复制", "区域截图已放入剪贴板")
     except Exception as e:
         notify("错误", str(e))
 
@@ -213,7 +214,7 @@ def show_welcome_window():
             "解决的问题：不用先手动保存图片、再复制文件地址。"
             "复制图片后直接 Ctrl+V，就能粘贴保存后的路径。\n\n"
             "PrintScreen 会被本软件接管为区域截图并复制文件路径；"
-            "Ctrl+PrintScreen 会把全屏截图图片放入剪贴板。\n\n"
+            "Ctrl+PrintScreen 会把区域截图图片放入剪贴板。\n\n"
             "关闭这个窗口不会退出程序。以后请在右下角系统托盘里"
             "右键 ImageToPath 图标进行设置、打开保存目录或退出。"
         )
@@ -242,6 +243,101 @@ def maybe_show_welcome_window():
     """首次启动时显示说明；关闭后继续进入托盘。"""
     if _config and _config.show_welcome_on_startup:
         show_welcome_window()
+
+
+def get_app_dir() -> str:
+    """返回脚本或 exe 所在目录。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_desktop_shortcut_target(app_dir: str, executable: str, frozen: bool) -> tuple[str, str]:
+    """返回桌面快捷方式目标和参数。"""
+    if frozen:
+        return executable, ""
+
+    run_vbs = os.path.join(app_dir, "run.vbs")
+    if os.path.exists(run_vbs):
+        return run_vbs, ""
+
+    return _pythonw_path(executable), f'"{os.path.join(app_dir, "Program.py")}"'
+
+
+def create_desktop_shortcut(config: AppConfig) -> bool:
+    """首次运行时在桌面创建快捷方式。"""
+    if config.desktop_shortcut_created:
+        return True
+
+    try:
+        app_dir = get_app_dir()
+        target, args = get_desktop_shortcut_target(app_dir, sys.executable, getattr(sys, "frozen", False))
+        shell = __import__("win32com.client").client.Dispatch("WScript.Shell")
+        desktop = shell.SpecialFolders("Desktop")
+        shortcut_path = os.path.join(desktop, "ImageToPath.lnk")
+        shortcut = shell.CreateShortcut(shortcut_path)
+        shortcut.TargetPath = target
+        shortcut.Arguments = args
+        shortcut.WorkingDirectory = app_dir
+        icon_path = sys.executable if getattr(sys, "frozen", False) else os.path.join(app_dir, "Resources", "app.ico")
+        if os.path.exists(icon_path):
+            shortcut.IconLocation = icon_path
+        shortcut.Save()
+
+        config.desktop_shortcut_created = True
+        save_config(config)
+        return True
+    except Exception:
+        return False
+
+
+def _pythonw_path(executable: str) -> str:
+    """从 python.exe 推导 pythonw.exe。"""
+    folder = os.path.dirname(executable)
+    pythonw = os.path.join(folder, "pythonw.exe")
+    if os.path.basename(executable).lower() == "python.exe":
+        return pythonw
+    return pythonw if os.path.exists(pythonw) else executable
+
+
+def build_launch_command(app_dir: str, executable: str, frozen: bool) -> str:
+    """生成 Windows 开机启动命令。"""
+    if frozen:
+        return f'"{executable}"'
+    return f'"{_pythonw_path(executable)}" "{os.path.join(app_dir, "Program.py")}"'
+
+
+def update_startup_registry(enabled: bool) -> bool:
+    """更新 HKCU Run 开机自启动项。"""
+    try:
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+            if enabled:
+                command = build_launch_command(get_app_dir(), sys.executable, getattr(sys, "frozen", False))
+                winreg.SetValueEx(key, STARTUP_REG_NAME, 0, winreg.REG_SZ, command)
+            else:
+                try:
+                    winreg.DeleteValue(key, STARTUP_REG_NAME)
+                except FileNotFoundError:
+                    pass
+        return True
+    except Exception:
+        return False
+
+
+def set_start_with_windows(config: AppConfig, enabled: bool) -> bool:
+    """设置开机自启动，失败时回滚配置。"""
+    old_value = config.start_with_windows
+    if not update_startup_registry(enabled):
+        return False
+
+    config.start_with_windows = enabled
+    if save_config(config):
+        return True
+
+    config.start_with_windows = old_value
+    update_startup_registry(old_value)
+    return False
 
 
 def apply_save_folder(config: AppConfig, folder: str) -> tuple[bool, str]:
@@ -275,8 +371,8 @@ def apply_save_folder(config: AppConfig, folder: str) -> tuple[bool, str]:
 
 # ——— 托盘菜单 ———
 
-def menu_capture_fullscreen(icon, item):
-    threading.Thread(target=on_screenshot, daemon=True).start()
+def menu_capture_region_to_clipboard(icon, item):
+    threading.Thread(target=on_region_capture_to_clipboard, daemon=True).start()
 
 
 def menu_capture_region(icon, item):
@@ -302,6 +398,12 @@ def menu_toggle_monitor(icon, item):
         _monitor.start()
     else:
         _monitor.stop()
+
+
+def menu_toggle_start_with_windows(icon, item):
+    enabled = not item.checked
+    if not set_start_with_windows(_config, enabled):
+        notify("保存配置失败", "无法更改开机自启动状态")
 
 
 def menu_change_folder(icon, item):
@@ -337,7 +439,7 @@ def _hotkey_thread_func():
     # PrintScreen → 区域截图
     if not ctypes.windll.user32.RegisterHotKey(None, HOTKEY_REGION_ID, 0, win32con.VK_SNAPSHOT):
         notify("热键注册失败", "PrintScreen 已被占用")
-    # Ctrl+PrintScreen → 全屏截图
+    # Ctrl+PrintScreen → 区域截图到剪贴板
     if not ctypes.windll.user32.RegisterHotKey(None, HOTKEY_FULLSCREEN_ID, win32con.MOD_CONTROL, win32con.VK_SNAPSHOT):
         notify("热键注册失败", "Ctrl+PrintScreen 已被占用")
 
@@ -350,7 +452,7 @@ def _hotkey_thread_func():
                 if msg.wParam == HOTKEY_REGION_ID:
                     threading.Thread(target=on_region_capture, daemon=True).start()
                 elif msg.wParam == HOTKEY_FULLSCREEN_ID:
-                    threading.Thread(target=on_screenshot, daemon=True).start()
+                    threading.Thread(target=on_region_capture_to_clipboard, daemon=True).start()
             ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
             ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
         else:
@@ -393,17 +495,24 @@ def main():
     # 启动全局热键
     start_hotkey_listener()
 
+    create_desktop_shortcut(_config)
+
     # 创建托盘图标
     tray_image = create_tray_icon_image()
 
     menu = pystray.Menu(
         pystray.MenuItem("区域截图 (PrintScreen)", menu_capture_region, default=True),
-        pystray.MenuItem("复制全屏截图 (Ctrl+PrintScreen)", menu_capture_fullscreen),
+        pystray.MenuItem("复制区域截图 (Ctrl+PrintScreen)", menu_capture_region_to_clipboard),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
             "自动保存剪贴板图片",
             menu_toggle_monitor,
             checked=lambda item: _config.auto_save_clipboard_image,
+        ),
+        pystray.MenuItem(
+            "开机自启动",
+            menu_toggle_start_with_windows,
+            checked=lambda item: _config.start_with_windows,
         ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("更改保存目录...", menu_change_folder),
