@@ -1,5 +1,7 @@
 # ImageToPath
 
+语言：中文 | [English](README.en.md)
+
 ImageToPath 是一个轻量 Windows 托盘工具：把截图或剪贴板里的图片保存到本地，然后把保存后的图片路径自动复制回剪贴板。
 
 适合这种工作流：
