@@ -1,0 +1,15 @@
+{
+  "save_folder": "C:\\Users\\YourName\\Pictures\\Screenshots",
+  "file_name_format": "{yyyy}{MM}{dd}_{HH}{mm}{ss}",
+  "image_format": "png",
+  "jpeg_quality": 90,
+  "auto_save_clipboard_image": true,
+  "copy_path_to_clipboard": true,
+  "show_notification": true,
+  "hotkey_screenshot": "print_screen",
+  "hotkey_fullscreen": "ctrl+print_screen",
+  "minimize_to_tray": true,
+  "clipboard_poll_interval": 500,
+  "start_with_windows": false
+}
+
